@@ -49,7 +49,18 @@ app.post('/api/rewards',auth,async(req,res,next)=>{try{if(req.user.role!=='stude
 app.get('/api/teacher/overview',auth,teacher,async(_req,res,next)=>{try{const [students,submissions]=await Promise.all([db().request().query("SELECT id,full_name,email,team,created_at FROM dbo.cg_users WHERE role='student' ORDER BY full_name"),db().request().query("SELECT s.id,s.user_id,u.full_name,u.team,s.mission_id,s.evidence,s.status,s.feedback,s.created_at FROM dbo.cg_submissions s JOIN dbo.cg_users u ON s.user_id=u.id ORDER BY CASE s.status WHEN 'pending' THEN 0 WHEN 'revision' THEN 1 ELSE 2 END,s.created_at DESC")]);res.json({students:students.recordset,submissions:submissions.recordset})}catch(err){next(err)}});
 app.patch('/api/teacher/submissions/:id',auth,teacher,async(req,res,next)=>{try{const id=Number(req.params.id),status=req.body?.status,feedback=req.body?.feedback;if(!Number.isInteger(id)||id<1||!['approved','revision'].includes(status)||typeof feedback!=='string'||feedback.length>1000||(status==='revision'&&feedback.trim().length<5))return res.status(400).json({error:'Indica una decisión y una retroalimentación válida.'});const result=await db().request().input('id',sql.Int,id).input('status',sql.NVarChar(12),status).input('feedback',sql.NVarChar(1000),feedback.trim()).query("UPDATE dbo.cg_submissions SET status=@status,feedback=@feedback,reviewed_at=SYSUTCDATETIME() WHERE id=@id AND status='pending'; SELECT @@ROWCOUNT AS updated");if(!result.recordset[0]?.updated)return res.status(409).json({error:'La entrega ya fue revisada o no existe.'});res.json({ok:true})}catch(err){next(err)}});
 // Narrativas editables: la lectura es publica; solo el docente autenticado puede modificarlas.
-app.get('/api/stories',async(_req,res,next)=>{try{const r=await db().request().query('SELECT mission_id,headline,transmission,dilemma,choice_a,choice_b,correct_choice,success_text,retry_text,cliffhanger,updated_at FROM dbo.cg_stories ORDER BY mission_id');res.json({stories:r.recordset})}catch(err){next(err)}});
+app.get('/api/stories',async(_req,res,next)=>{try{const r=await db().request().query('SELECT mission_id,headline,transmission,dilemma,choice_a,choice_b,updated_at FROM dbo.cg_stories ORDER BY mission_id');res.json({stories:r.recordset})}catch(err){next(err)}});
+// La respuesta correcta y los desenlaces se evalúan exclusivamente en el servidor.
+const decisionLimiter=rateLimit({windowMs:15*60*1000,limit:60,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Demasiados intentos. Vuelve a intentarlo después.'}});
+app.post('/api/stories/:id/decide',decisionLimiter,async(req,res,next)=>{try{
+ const id=Number(req.params.id),choice=req.body?.choice;
+ if(!Number.isInteger(id)||id<1||id>4||!['a','b'].includes(choice))return res.status(400).json({error:'Decisión inválida.'});
+ const r=await db().request().input('id',sql.Int,id).query('SELECT correct_choice,success_text,retry_text,cliffhanger FROM dbo.cg_stories WHERE mission_id=@id');
+ if(!r.recordset.length)return res.status(404).json({error:'Misión no encontrada.'});
+ const st=r.recordset[0],ok=choice===st.correct_choice;
+ res.json({ok,message:ok?st.success_text:st.retry_text,cliffhanger:ok?st.cliffhanger:null});
+ }catch(err){next(err)}});
+app.get('/api/teacher/stories',auth,teacher,async(_req,res,next)=>{try{const r=await db().request().query('SELECT mission_id,headline,transmission,dilemma,choice_a,choice_b,correct_choice,success_text,retry_text,cliffhanger,updated_at FROM dbo.cg_stories ORDER BY mission_id');res.json({stories:r.recordset})}catch(err){next(err)}});
 app.put('/api/teacher/stories/:id',auth,teacher,async(req,res,next)=>{try{
  const id=Number(req.params.id),fields={headline:120,transmission:1400,dilemma:500,choice_a:220,choice_b:220,success_text:700,retry_text:700,cliffhanger:500};
  if(!Number.isInteger(id)||id<1||id>4||!['a','b'].includes(req.body?.correct_choice))return res.status(400).json({error:'Misión o decisión inválida.'});
