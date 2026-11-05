@@ -91,3 +91,12 @@ Render asigna `PORT` automáticamente; no es obligatorio configurarlo. El backen
 ## Seguridad y mantenimiento
 
 Esta versión requiere conexión a Azure para iniciar; no admite modo local sin base de datos. El servicio debe permanecer conectado a la BD para registrar y consultar datos. Haz copias de seguridad con Azure SQL y utiliza HTTPS. El código de clase es compartido: alumnos que lo conozcan pueden registrarse, por lo que el docente debe compartirlo de forma controlada y renovarlo si se filtra. Para desplegar a mayor escala conviene incorporar recuperación de contraseña, gestión de consentimientos, auditoría, cuentas múltiples por institución y revisión de seguridad.
+
+
+## Actualización: narrativa interactiva editable
+
+Esta versión incluye cuatro episodios con dilemas y dos decisiones por capítulo. Desde el panel docente aparece **Editor de narrativas**: selecciona una misión, edita su transmisión, dilema, opciones, retroalimentación y cierre, y guarda. Se persiste en Azure SQL mediante `dbo.cg_stories`, creada automáticamente al iniciar la aplicación (si el usuario SQL tiene permiso `CREATE TABLE`). Los textos iniciales se siembran una sola vez; los cambios del docente no se sobrescriben al reiniciar.
+
+Los alumnos abren cada capítulo desde el mapa de misiones o la sección Historia interactiva. Las decisiones generan comentarios formativos, sin otorgar XP ni alterar notas: solo los envíos y la aprobación docente permiten avanzar académicamente. Se conservan cuentas, progreso, cuestionarios y entregas existentes.
+
+**Despliegue:** sustituir `server.js`, `public/index.html`, `public/app.js`, `public/style.css` y `README.md` en el repositorio GitHub, realizar commit y push. Render reconstruye la aplicación si el auto-deploy está activo. Verificar `https://TU-SERVICIO.onrender.com/api/health` y luego `/api/stories`; comprobar edición desde cuenta docente. No modificar variables secretas.
